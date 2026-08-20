@@ -1,9 +1,8 @@
 replicaCount: 3
 
 image:
-  # Matches .gitlab-ci.yml's IMAGE var: "$REGISTRY/docker-nabil/$APP_NAME"
-  repository: <REGISTRY>/docker-nabil/amnil/nabilcsr-website-ui
-  tag: placeholder   # CI overwrites this with $IMAGE_TAG_OUT on e
+  repository: jcr.server247.info/docker-nabil/amnil/nabilcsr-website-ui
+  tag: placeholder   # CI overwrites this with $IMAGE_TAG_OUT
   pullPolicy: IfNotPresent
 
 cmsApiUrl: "http://csrapi-nabil.server247.info/"
@@ -14,7 +13,7 @@ service:
 
 ingress:
   host: nabil.server247.info
-  tlsSecretName: <TLS_SECRET_NAME>
+  tlsSecretName: nabilcsr-selfsigned-tls
 
 resources:
   requests:

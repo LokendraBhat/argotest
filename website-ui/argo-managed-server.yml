@@ -4,21 +4,24 @@ metadata:
   name: nabilcsr-website-ui
   namespace: argocd
 spec:
-  project: default
-  source:
-    repoURL: <MANIFESTS_REPO_URL>          # same repo .gitlab-ci.nes
-    targetRevision: <MANIFESTS_REPO_BRANCH> # matches $MANIFESTS_R
-    path: <OVERLAY_PATH>/nabilcsr-website-ui
-    helm:
-      valueFiles: ["values.yaml"]
   destination:
-    server: https://kubernetes.default.svc
-    namespace: <NAMESPACE>
+    name: ''
+    namespace: nabilcsr
+  source:
+    path: website-ui
+    repoURL: https://github.com/LokendraBhat/argotest.git
+    targetRevision: HEAD
+    helm:
+      valueFiles:
+        - values.yaml
+  sources: []
+  project: default
   syncPolicy:
     automated:
       prune: true
-      selfHeal: true    syncOptions:
-      - CreateNamespace=true
+      selfHeal: true
+      syncOptions:
+        - CreateNamespace=true
 
 #  The one CI change needed, in .gitlab-ci.yml's .gitops-deploy-templpecific step with a Helm-values edit:
 # before:
