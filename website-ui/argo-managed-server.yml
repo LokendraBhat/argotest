@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nabilcsr-website-ui
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: <MANIFESTS_REPO_URL>          # same repo .gitlab-ci.nes
+    targetRevision: <MANIFESTS_REPO_BRANCH> # matches $MANIFESTS_R
+    path: <OVERLAY_PATH>/nabilcsr-website-ui
+    helm:
+      valueFiles: ["values.yaml"]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: <NAMESPACE>
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true    syncOptions:
+      - CreateNamespace=true
+
+#  The one CI change needed, in .gitlab-ci.yml's .gitops-deploy-templpecific step with a Helm-values edit:
+# before:
+#- cd "argocd-repo/$OVERLAY_PATH"                                                                                                                               
+#- kustomize edit set image "$IMAGE=$IMAGE_REF"

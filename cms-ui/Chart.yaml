@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nabilcsr-website-ui
+description: CSR/NSSE microsite (Next.js 16, standalone) helm char
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

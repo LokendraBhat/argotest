@@ -1,0 +1,30 @@
+replicaCount: 3
+
+image:
+  # Matches .gitlab-ci.yml's IMAGE var: "$REGISTRY/docker-nabil/$APP_NAME"
+  repository: <REGISTRY>/docker-nabil/amnil/nabilcsr-website-ui
+  tag: placeholder   # CI overwrites this with $IMAGE_TAG_OUT on e
+  pullPolicy: IfNotPresent
+
+cmsApiUrl: "http://csrapi-nabil.server247.info/"
+
+service:
+  port: 80
+  targetPort: 3000
+
+ingress:
+  host: nabil.server247.info
+  tlsSecretName: <TLS_SECRET_NAME>
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  minReplicas: 3
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70

@@ -1,0 +1,191 @@
+Since the CI's .gitops-deploy-template already expects a Kustomize-based manifests repo (kustomize edit set image ...), here's a set that fits that pattern directly. Using native Ingress path matching also avoids the whole class of nginx trailing-slash bugs we just spent this session fixing — Kubernetes' pathType: Prefix does segment-aware matching, so /csr correctly does not also match /csrassets, no regex tricks needed.
+
+# configmap.yaml
+# Only CMS_API_URL belongs here — everything NEXT_PUBLIC_* is baked into
+# the client bundle at BUILD time (see Dockerfile), so setting it here at
+# runtime would have zero effect. This is the one var the Dockerfile's own
+# comments confirm is safe to override post-build.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nabilcsr-website-ui-config
+  namespace: <NAMESPACE>
+data:
+  CMS_API_URL: "http://csrapi-nabil.server247.info/"
+
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nabilcsr-website-ui
+  namespace: <NAMESPACE>
+  labels:
+    app: nabilcsr-website-ui
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # never drop below `replicas` during
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: nabilcsr-website-ui
+  template:
+    metadata:
+      labels:
+        app: nabilcsr-website-ui
+    spec:
+      containers:
+        - name: nabilcsr-website-ui
+          image: <REGISTRY>/docker-nabil/amnil/nabilcsr-website-ui
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: nabilcsr-website-ui-config
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001        # matches the `nextjs` user the
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      # No readOnlyRootFilesystem here deliberately — Next's built-in fetch
+      # Data Cache (lib/api/client.ts's fetchFrontend, revalidate: 300s)
+      # writes to .next/cache/fetch-cache on disk by default when
+      # self-hosted. Locking the filesystem would silently disable that
+      # cache rather than crash the app, but there's no upside without also
+      # mounting an emptyDir at that path — skip the hardening unless you
+      # add that volume.
+
+# service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nabilcsr-website-ui
+  namespace: <NAMESPACE>
+spec:
+  selector:
+    app: nabilcsr-website-ui
+  ports:
+    - port: 80
+      targetPort: 3000
+
+# hpa.yaml — scales the replica count discussed throughout this se
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nabilcsr-website-ui
+  namespace: <NAMESPACE>
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nabilcsr-website-ui
+  minReplicas: 3
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+# ingress-app.yaml — /csr, /nsse, and their /ne/* variants. No rewrite:
+# same "forward the path unchanged" rule that fixed the nginx redi
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nabilcsr-website-ui-app
+  namespace: <NAMESPACE>
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["nabil.server247.info"]
+      secretName: <TLS_SECRET_NAME>
+  rules:
+    - host: nabil.server247.info
+      http:
+        paths:
+          - path: /csr
+            pathType: Prefix
+            backend: { service: { name: nabilcsr-website-ui, port:
+          - path: /nsse
+            pathType: Prefix
+            backend: { service: { name: nabilcsr-website-ui, port:
+          - path: /ne/csr
+            pathType: Prefix
+            backend: { service: { name: nabilcsr-website-ui, port: { number: 80 } } }
+          - path: /ne/nsse
+            pathType: Prefix
+            backend: { service: { name: nabilcsr-website-ui, port:
+
+# ingress-assets.yaml — /csrassets/*, separate Ingress object beca
+# rewrite-target annotation applies to every path in the Ingress i
+# it must not leak onto the /csr, /nsse rules above.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nabilcsr-website-ui-assets
+  namespace: <NAMESPACE>
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["nabil.server247.info"]
+      secretName: <TLS_SECRET_NAME>
+  rules:
+    - host: nabil.server247.info
+      http:
+        paths:
+          - path: /csrassets(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend: { service: { name: nabilcsr-website-ui, port:
+
+# kustomization.yaml — drop this whole set into the overlay path y
+# .gitlab-ci.yml's gitops-deploy-template already expects
+# ($MANIFESTS_REPO_URL / $STAGING_OVERLAY_PATH or $PRODUCTION_OVERLAY_PATH).
+# CI's `kustomize edit set image "$IMAGE=$IMAGE_REF"` rewrites the tag below
+# on every deploy — the placeholder here just needs to exist once.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml
+  - ingress-app.yaml
+  - ingress-assets.yaml
+images:
+  - name: <REGISTRY>/docker-nabil/amnil/nabilcsr-website-ui
+    newTag: placeholder
+
+Fill in <NAMESPACE>, <REGISTRY>, <TAG>, and <TLS_SECRET_NAME> — I ISTRY is a masked CI secret, and I don't know your cluster's actualnamespace/cert-manager setup). Also worth confirming: is the existing main website on nabil.server247.info also running as a k8s Ingress? If it's the bare-VM nginx config we've been editing all session, these two Ingress objects cyou'd need to either migrate that site's routing into Ingress too,or keep it on the VM nginx and have that nginx proxy /csr//nsse//csrassets to this Service's cluster-external endpoint instead of a bare pod IP.
+
