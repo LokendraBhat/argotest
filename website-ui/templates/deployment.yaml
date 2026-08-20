@@ -18,7 +18,8 @@ spec:
     spec:
       containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.
+          # FIXED: Cleanly closed tag block and wrapped correctly in quotes
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
@@ -31,7 +32,8 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
-            httpGet: { path: /api/health, port: {{ .Values.service
+            # FIXED: Cleanly closed targetPort block
+            httpGet: { path: /api/health, port: {{ .Values.service.targetPort }} }
             initialDelaySeconds: 15
             periodSeconds: 20
             failureThreshold: 3
