@@ -3,10 +3,16 @@ kind: Application
 metadata:
   name: nabilcsr-website-ui
   namespace: argocd
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: my-app=jcr.server247.info/docker-nabil/amnil/nabilcsr-website-ui
+    
+    argocd-image-updater.argoproj.io/my-app.allow-tags: 'regexp:^staging-[a-f0-9]{8}-\d+$'
+    argocd-image-updater.argoproj.io/my-app.update-strategy: latest
+    argocd-image-updater.argoproj.io/my-app.helm.image-name: image.repository
+    argocd-image-updater.argoproj.io/my-app.helm.image-tag: image.tag
+    argocd-image-updater.argoproj.io/write-back-method: argocd
 spec:
-  destination:
-    name: ''
-    namespace: nabilcsr
+  project: default
   source:
     path: website-ui
     repoURL: https://github.com/LokendraBhat/argotest.git
@@ -14,8 +20,9 @@ spec:
     helm:
       valueFiles:
         - values.yaml
-  sources: []
-  project: default
+  destination:
+    name: in-cluster
+    namespace: nabilcsr
   syncPolicy:
     automated:
       prune: true
